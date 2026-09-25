@@ -1,0 +1,24 @@
+{
+  "name": "rap-city-night-run",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "latest",
+    "@tweenjs/tween.js": "latest",
+    "howler": "latest",
+    "nipplejs": "latest",
+    "postprocessing": "latest",
+    "three": "latest",
+    "yuka": "latest"
+  },
+  "devDependencies": {
+    "vite": "latest",
+    "vite-plugin-pwa": "latest"
+  }
+}
