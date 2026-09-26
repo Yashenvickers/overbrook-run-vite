@@ -14,6 +14,7 @@ export class WeaponSystem {
     this.reloading = false;
     this.recoil = 0;
     this.muzzleTime = 0;
+    this.tracers = [];
     this.raycaster = new THREE.Raycaster();
     this.view = new THREE.Group();
     camera.add(this.view);
@@ -75,6 +76,17 @@ export class WeaponSystem {
   }
 
   update(dt, time, fireHeld, targets) {
+    for (let i = this.tracers.length - 1; i >= 0; i--) {
+      const t = this.tracers[i];
+      t.life -= dt;
+      t.mesh.material.opacity = Math.max(0, t.life / 0.07);
+      if (t.life <= 0) {
+        this.scene.remove(t.mesh);
+        t.mesh.geometry.dispose();
+        t.mesh.material.dispose();
+        this.tracers.splice(i, 1);
+      }
+    }
     this.muzzleTime = Math.max(0, this.muzzleTime - dt);
     this.muzzle.intensity = this.muzzleTime > 0 ? 36 : 0;
     this.recoil *= Math.pow(0.0015, dt);
@@ -106,16 +118,29 @@ export class WeaponSystem {
       const x = (Math.random() - 0.5) * w.spread;
       const y = (Math.random() - 0.5) * w.spread;
       const dir = new THREE.Vector3(x, y, -1).applyQuaternion(this.camera.quaternion).normalize();
-      this.raycaster.set(this.camera.getWorldPosition(new THREE.Vector3()), dir);
+      const origin = this.camera.getWorldPosition(new THREE.Vector3());
+      this.raycaster.set(origin, dir);
       this.raycaster.far = 75;
       const hits = this.raycaster.intersectObjects(targets, true);
       const hit = hits.find((h) => h.object.userData.enemyRef);
+      if (i === 0) {
+        const end = hit ? hit.point : origin.clone().addScaledVector(dir, w.id === 'shotgun' ? 32 : 58);
+        this.spawnTracer(origin, end, w.id === 'shotgun' ? 0xffc857 : 0x66eeff);
+      }
       if (!hit) continue;
       const enemy = hit.object.userData.enemyRef;
       const headshot = hit.object.userData.hitZone === 'head';
       const damage = w.damage * (headshot ? w.headMultiplier : 1);
       this.onHit?.(enemy, damage, headshot, hit.point);
     }
+  }
+
+  spawnTracer(start, end, color) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const material = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.78, depthWrite: false });
+    const mesh = new THREE.Line(geometry, material);
+    this.scene.add(mesh);
+    this.tracers.push({ mesh, life: 0.07 });
   }
 
   pickupAmmo(amount = 24) {
