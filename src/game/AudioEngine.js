@@ -49,6 +49,11 @@ export class AudioEngine {
   reload() { this.tone({ freq: 220, duration: 0.05, type: 'square', gain: 0.08, slide: 110 }); }
   wave() { this.tone({ freq: 320, duration: 0.18, type: 'sine', gain: 0.12, slide: 600 }); }
   damage() { this.tone({ freq: 62, duration: 0.18, type: 'sawtooth', gain: 0.17, slide: -20 }); }
+  victory() {
+    this.tone({ freq: 330, duration: 0.16, type: 'square', gain: 0.11, slide: 160 });
+    setTimeout(() => this.tone({ freq: 520, duration: 0.18, type: 'square', gain: 0.09, slide: 190 }), 130);
+    setTimeout(() => this.tone({ freq: 790, duration: 0.36, type: 'sine', gain: 0.08, slide: 170 }), 290);
+  }
 
   destroy() { this.ctx?.close(); }
 }
