@@ -21,6 +21,8 @@ export class Game {
     this.clock = new THREE.Clock();
     this.wavePending = false;
     this.pickups = [];
+    this.cameraKick = 0;
+    this.stepTime = 0;
   }
 
   mount() {
@@ -108,7 +110,7 @@ export class Game {
       wave: q('[data-wave]'), enemies: q('[data-enemies]'), score: q('[data-score]'),
       health: q('[data-health]'), armor: q('[data-armor]'), healthbar: q('[data-healthbar]'), armorbar: q('[data-armorbar]'),
       weapon: q('[data-weapon]'), ammo: q('[data-ammo]'), reserve: q('[data-reserve]'), reload: q('[data-reload]'),
-      toast: q('[data-toast]'), hitmarker: q('.hitmarker'), damage: q('.damage-flash'), finalScore: q('[data-final-score]'),
+      toast: q('[data-toast]'), hitmarker: q('.hitmarker'), damage: q('.damage-flash'), finalScore: q('[data-final-score]'), endLabel: q('.gameover small'),
     };
 
     this.input = new Input({
@@ -155,7 +157,7 @@ export class Game {
     this.enemies.clear();
     this.pickups.forEach((p) => this.scene.remove(p.mesh));
     this.pickups = [];
-    this.wave = 1; this.score = 0; this.kills = 0; this.health = 100; this.armor = 50; this.wavePending = false;
+    this.wave = 1; this.score = 0; this.kills = 0; this.health = 100; this.armor = 50; this.wavePending = false; this.cameraKick = 0; this.stepTime = 0;
     this.camera.position.set(0, CONFIG.player.height, 12);
     this.yaw = 0; this.pitch = 0;
     this.weapon.states.forEach((w, i) => { w.ammo = CONFIG.weapons[i].mag; w.reserveAmmo = CONFIG.weapons[i].reserve; });
@@ -179,7 +181,8 @@ export class Game {
   nextWave() {
     if (this.wavePending || !this.running) return;
     if (this.wave >= CONFIG.waves.length) {
-      this.toast('DISTRICT CLEARED // ENDLESS MODE');
+      this.victory();
+      return;
     }
     this.wavePending = true;
     this.wave += 1;
@@ -228,6 +231,7 @@ export class Game {
       left -= absorbed;
     }
     this.health -= left;
+    this.cameraKick = Math.min(0.13, this.cameraKick + 0.065);
     this.audio.damage();
     this.ui.damage.classList.add('show');
     setTimeout(() => this.ui.damage.classList.remove('show'), 90);
@@ -240,6 +244,19 @@ export class Game {
     this.input.fireHeld = false;
     document.exitPointerLock?.();
     this.ui.hud.classList.add('hidden');
+    this.ui.endLabel.textContent = 'RUN TERMINATED';
+    this.ui.finalScore.textContent = String(Math.round(this.score)).padStart(6, '0');
+    this.ui.gameover.classList.remove('hidden');
+  }
+
+  victory() {
+    this.running = false;
+    this.input.fireHeld = false;
+    this.score += 1500;
+    this.audio.victory();
+    document.exitPointerLock?.();
+    this.ui.hud.classList.add('hidden');
+    this.ui.endLabel.textContent = 'DISTRICT CLEARED // 5 WAVES';
     this.ui.finalScore.textContent = String(Math.round(this.score)).padStart(6, '0');
     this.ui.gameover.classList.remove('hidden');
   }
@@ -308,7 +325,11 @@ export class Game {
       const tryZ = this.camera.position.clone(); tryZ.z += delta.z;
       if (this.world.canOccupy(tryZ)) this.camera.position.z = tryZ.z;
     }
-    this.camera.position.y = CONFIG.player.height;
+    if (len > 0.01) this.stepTime += dt * (this.input.sprinting() ? 13 : 9);
+    const bob = len > 0.01 ? Math.sin(this.stepTime) * 0.022 : 0;
+    this.cameraKick *= Math.pow(0.012, dt);
+    this.camera.position.y = CONFIG.player.height + bob + (Math.random() - 0.5) * this.cameraKick;
+    this.camera.rotation.z = (Math.random() - 0.5) * this.cameraKick * 0.35;
   }
 
   updatePickups(dt) {
