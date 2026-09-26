@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 const bodyMat = () => new THREE.MeshStandardMaterial({ color: 0x2c313b, roughness: 0.78, metalness: 0.06 });
-const accentMat = () => new THREE.MeshStandardMaterial({ color: 0xff2d55, emissive: 0x26030b, emissiveIntensity: 2, roughness: 0.42 });
+const accentMat = () => new THREE.MeshStandardMaterial({ color: 0xff2d55, emissive: 0xff153d, emissiveIntensity: 2.4, roughness: 0.3, metalness: 0.2 });
 
 export class EnemySystem {
   constructor({ scene, world, onPlayerDamage, onKill }) {
@@ -35,12 +35,18 @@ export class EnemySystem {
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.78, 1.05, 0.46), bodyMat());
     torso.position.y = 1.05;
     torso.castShadow = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.29, 14, 10), accentMat());
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.29, 14, 10), bodyMat());
     head.position.y = 1.82;
     head.castShadow = true;
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.075, 0.08), accentMat());
+    visor.position.set(0, 1.84, 0.255);
     const legs = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.76, 0.38), bodyMat());
     legs.position.y = 0.35;
-    group.add(torso, head, legs);
+    const shoulders = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.18, 0.5), bodyMat());
+    shoulders.position.y = 1.36;
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.7), new THREE.MeshStandardMaterial({ color: 0x101217, metalness: 0.72, roughness: 0.28 }));
+    gun.position.set(0.32, 1.04, 0.45);
+    group.add(torso, head, visor, legs, shoulders, gun);
     this.scene.add(group);
 
     const enemy = {
@@ -53,6 +59,9 @@ export class EnemySystem {
       attackDelay: Math.max(520, 1080 - wave * 55),
       lastAttack: performance.now() + Math.random() * 500,
       strafe: Math.random() < 0.5 ? -1 : 1,
+      visor,
+      pulse: Math.random() * Math.PI * 2,
+      muzzlePulse: 0,
       dead: false,
     };
     [torso, legs].forEach((m) => { m.userData.enemyRef = enemy; m.userData.hitZone = 'body'; this.targets.push(m); });
@@ -96,6 +105,8 @@ export class EnemySystem {
     const now = performance.now();
     for (const e of this.enemies) {
       if (e.dead) continue;
+      e.muzzlePulse = Math.max(0, e.muzzlePulse - dt);
+      e.visor.material.emissiveIntensity = 2.2 + Math.sin(performance.now() * 0.006 + e.pulse) * 0.35 + (e.muzzlePulse > 0 ? 4 : 0);
       const pos = e.group.position;
       const toPlayer = playerPosition.clone().sub(pos);
       toPlayer.y = 0;
@@ -114,6 +125,7 @@ export class EnemySystem {
         }
       } else if (now - e.lastAttack > e.attackDelay) {
         e.lastAttack = now;
+        e.muzzlePulse = 0.09;
         const accuracy = Math.max(0.22, 0.62 - dist * 0.022);
         if (Math.random() < accuracy) this.onPlayerDamage?.(7 + Math.random() * 7);
       }
