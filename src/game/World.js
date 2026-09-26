@@ -11,6 +11,8 @@ export class World {
     this.scene = scene;
     this.colliders = [];
     this.neon = [];
+    this.rain = null;
+    this.lastUpdateTime = 0;
   }
 
   build() {
@@ -30,12 +32,12 @@ export class World {
     moon.shadow.camera.bottom = -48;
     this.scene.add(moon);
 
-    const road = box(88, 0.5, 88, 0x11131a, 0.92, 0.04);
+    const road = box(88, 0.5, 88, 0x0d1119, 0.38, 0.42);
     road.position.y = -0.3;
     road.receiveShadow = true;
     this.scene.add(road);
 
-    const street = box(18, 0.03, 88, 0x171a22, 0.88, 0.02);
+    const street = box(18, 0.03, 88, 0x121824, 0.32, 0.38);
     street.position.y = -0.01;
     this.scene.add(street);
 
@@ -44,6 +46,9 @@ export class World {
     this.addCover();
     this.addBoundary();
     this.addSigns();
+    this.addBillboards();
+    this.addPuddles();
+    this.addRain();
   }
 
   addLaneMarks() {
@@ -131,6 +136,74 @@ export class World {
     });
   }
 
+  addBillboards() {
+    const makeTexture = (title, subtitle, a, b) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024; canvas.height = 256;
+      const ctx = canvas.getContext('2d');
+      const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+      g.addColorStop(0, '#050711'); g.addColorStop(1, '#111226');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = a; ctx.lineWidth = 8; ctx.strokeRect(8, 8, canvas.width - 16, canvas.height - 16);
+      ctx.shadowBlur = 28; ctx.shadowColor = a; ctx.fillStyle = '#f8fbff';
+      ctx.font = '900 92px Arial'; ctx.fillText(title, 54, 132);
+      ctx.shadowBlur = 18; ctx.shadowColor = b; ctx.fillStyle = b;
+      ctx.font = '800 28px Arial'; ctx.letterSpacing = '8px'; ctx.fillText(subtitle, 58, 188);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      return tex;
+    };
+    const specs = [
+      { x: -22.16, y: 6.8, z: -11, ry: Math.PI / 2, title: 'RAP CITY', sub: 'NIGHT RUN', a: '#40f3ff', b: '#ff3ca6' },
+      { x: 22.16, y: 8.1, z: 13, ry: -Math.PI / 2, title: 'RAPDM', sub: 'CULTURE → CONVERSIONS', a: '#ff3ca6', b: '#40f3ff' },
+    ];
+    specs.forEach((s) => {
+      const mat = new THREE.MeshBasicMaterial({ map: makeTexture(s.title, s.sub, s.a, s.b), toneMapped: false });
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(8.4, 2.1), mat);
+      board.position.set(s.x, s.y, s.z); board.rotation.y = s.ry;
+      this.scene.add(board);
+    });
+  }
+
+  addPuddles() {
+    const geo = new THREE.CircleGeometry(1, 24);
+    for (let i = 0; i < 18; i++) {
+      const mat = new THREE.MeshStandardMaterial({
+        color: i % 2 ? 0x101c2e : 0x1b1028,
+        roughness: 0.08, metalness: 0.65, transparent: true, opacity: 0.42,
+      });
+      const puddle = new THREE.Mesh(geo, mat);
+      puddle.rotation.x = -Math.PI / 2;
+      puddle.scale.set(0.45 + Math.random() * 1.8, 0.32 + Math.random() * 0.8, 1);
+      puddle.position.set((Math.random() - 0.5) * 14, 0.018, (Math.random() - 0.5) * 76);
+      this.scene.add(puddle);
+    }
+  }
+
+  addRain() {
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    const count = coarse ? 520 : 950;
+    const positions = new Float32Array(count * 3);
+    const speeds = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (Math.random() - 0.5) * 84;
+      positions[i * 3 + 1] = 2 + Math.random() * 24;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 84;
+      speeds[i] = 12 + Math.random() * 10;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.PointsMaterial({
+      color: 0x9fdcff, size: coarse ? 0.045 : 0.035,
+      transparent: true, opacity: 0.34, depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    const points = new THREE.Points(geo, mat);
+    this.scene.add(points);
+    this.rain = { points, speeds };
+  }
+
   addCollider(mesh, pad = 0) {
     mesh.updateMatrixWorld(true);
     const bb = new THREE.Box3().setFromObject(mesh);
@@ -150,10 +223,26 @@ export class World {
   }
 
   update(t) {
+    const dt = this.lastUpdateTime ? Math.min(0.05, t - this.lastUpdateTime) : 0.016;
+    this.lastUpdateTime = t;
     this.neon.forEach((n) => {
       const pulse = 0.85 + Math.sin(t * 1.9 + n.phase) * 0.12;
       n.sign.material.opacity = pulse;
       n.light.intensity = 18 + pulse * 8;
     });
+    if (this.rain) {
+      const pos = this.rain.points.geometry.attributes.position.array;
+      for (let i = 0; i < this.rain.speeds.length; i++) {
+        const y = i * 3 + 1;
+        pos[y] -= this.rain.speeds[i] * dt;
+        pos[i * 3] += 0.85 * dt;
+        if (pos[y] < 0.08) {
+          pos[y] = 18 + Math.random() * 10;
+          pos[i * 3] = (Math.random() - 0.5) * 84;
+          pos[i * 3 + 2] = (Math.random() - 0.5) * 84;
+        }
+      }
+      this.rain.points.geometry.attributes.position.needsUpdate = true;
+    }
   }
 }
